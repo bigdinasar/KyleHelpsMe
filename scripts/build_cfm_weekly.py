@@ -28,26 +28,37 @@ def absolute_url(u: str) -> str:
 
 def pick_first_image(soup: BeautifulSoup) -> str:
     """
-    The page often uses a <figure> with an <img> (sometimes id="img1" or "figure1_img1").
-    We'll try common patterns and fall back to first <img>.
+    Prefer the header hero image first (img#img1).
+    If not found, fall back to the first figure image, then any img.
     """
-    # 1) First figure image
-    fig = soup.find("figure")
-    if fig:
-        img = fig.find("img")
-        if img and img.get("src"):
-            return absolute_url(img["src"])
 
-    # 2) Common ids
-    for img_id in ["img1", "figure1_img1"]:
-        img = soup.find("img", {"id": img_id})
-        if img and img.get("src"):
-            return absolute_url(img["src"])
-
-    # 3) Any img with a src
-    img = soup.find("img", src=True)
+    # 1) The one you want (hero/header image)
+    img = soup.select_one("img#img1[src]")
     if img and img.get("src"):
         return absolute_url(img["src"])
+
+    # If it only has srcset, pick the largest srcset candidate
+    img = soup.select_one("img#img1[srcset]")
+    if img and img.get("srcset"):
+        candidates = []
+        for part in img["srcset"].split(","):
+            part = part.strip()
+            m = re.match(r"(\S+)\s+(\d+)w", part)
+            if m:
+                candidates.append((int(m.group(2)), m.group(1)))
+        if candidates:
+            candidates.sort()
+            return absolute_url(candidates[-1][1])
+
+    # 2) Fallback: first <figure> image (often figure1_img1)
+    fig_img = soup.select_one("figure img[src]")
+    if fig_img and fig_img.get("src"):
+        return absolute_url(fig_img["src"])
+
+    # 3) Fallback: any img with src
+    any_img = soup.find("img", src=True)
+    if any_img and any_img.get("src"):
+        return absolute_url(any_img["src"])
 
     return ""
 
