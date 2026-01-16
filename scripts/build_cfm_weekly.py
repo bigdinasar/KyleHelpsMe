@@ -2,6 +2,7 @@
 import json
 import re
 import sys
+import os
 from datetime import date, datetime, timezone
 from urllib.parse import urljoin
 
@@ -10,14 +11,16 @@ from bs4 import BeautifulSoup
 
 BASE = "https://www.churchofjesuschrist.org"
 MANUAL_PATH = "/study/manual/come-follow-me-for-home-and-church-old-testament-2026/{week:02d}?lang=eng"
-
 OUT_JSON = "data/come_follow_me_this_week.json"
 
 
 def iso_week_number(d: date) -> int:
-    # ISO week can be 1..53. Your manual is 1..52.
+    """
+    ISO week can be 1..53. Your manual appears to be 1..52.
+    Clamp to 52 so week 53 doesn't break the URL.
+    """
     wk = d.isocalendar().week
-    return min(wk, 52)
+    return min(int(wk), 52)
 
 
 def absolute_url(u: str) -> str:
@@ -26,71 +29,68 @@ def absolute_url(u: str) -> str:
     return urljoin(BASE, u)
 
 
+def get_text_or_empty(el) -> str:
+    return el.get_text(" ", strip=True) if el else ""
+
+
+def _largest_from_srcset(srcset: str) -> str:
+    """
+    srcset like: 'url1 60w, url2 100w, url3 640w'
+    Return the URL with the largest width.
+    """
+    if not srcset:
+        return ""
+    candidates = []
+    for part in srcset.split(","):
+        part = part.strip()
+        m = re.match(r"(\S+)\s+(\d+)w", part)
+        if m:
+            candidates.append((int(m.group(2)), m.group(1)))
+    if not candidates:
+        return ""
+    candidates.sort(key=lambda x: x[0])
+    return candidates[-1][1]
+
+
+def pick_best_image_from_tag(img_tag) -> str:
+    """
+    Given an <img> tag, prefer the largest srcset candidate, otherwise src.
+    """
+    if not img_tag:
+        return ""
+    srcset = img_tag.get("srcset", "")
+    best = _largest_from_srcset(srcset)
+    if best:
+        return absolute_url(best)
+    src = img_tag.get("src", "")
+    if src:
+        return absolute_url(src)
+    return ""
+
+
 def pick_first_image(soup: BeautifulSoup) -> str:
     """
-    Prefer the header hero image first (img#img1).
-    Use the LARGEST srcset candidate if available (best quality).
-    If not found, fall back to first figure image, then any img.
+    Prefer the header hero image (img#img1).
+    If missing, fall back to first <figure> image, then any <img>.
+    Always prefer the LARGEST srcset candidate when available.
     """
-
+    # 1) Desired header image
     img = soup.select_one("img#img1")
-    if img:
-        # Prefer largest srcset candidate (best quality)
-        srcset = img.get("srcset", "")
-        if srcset:
-            candidates = []
-            for part in srcset.split(","):
-                part = part.strip()
-                m = re.match(r"(\S+)\s+(\d+)w", part)
-                if m:
-                    candidates.append((int(m.group(2)), m.group(1)))
-            if candidates:
-                candidates.sort(key=lambda x: x[0])
-                return absolute_url(candidates[-1][1])
+    best = pick_best_image_from_tag(img)
+    if best:
+        return best
 
-        # Fallback to src if no srcset
-        src = img.get("src", "")
-        if src:
-            return absolute_url(src)
-
-    # 2) Fallback: first <figure> image
+    # 2) Fallback: first figure image
     fig_img = soup.select_one("figure img")
-    if fig_img:
-        # same idea: prefer srcset if present
-        srcset = fig_img.get("srcset", "")
-        if srcset:
-            candidates = []
-            for part in srcset.split(","):
-                part = part.strip()
-                m = re.match(r"(\S+)\s+(\d+)w", part)
-                if m:
-                    candidates.append((int(m.group(2)), m.group(1)))
-            if candidates:
-                candidates.sort(key=lambda x: x[0])
-                return absolute_url(candidates[-1][1])
+    best = pick_best_image_from_tag(fig_img)
+    if best:
+        return best
 
-        src = fig_img.get("src", "")
-        if src:
-            return absolute_url(src)
-
-    # 3) Fallback: any img
+    # 3) Fallback: any image
     any_img = soup.find("img")
-    if any_img:
-        srcset = any_img.get("srcset", "")
-        if srcset:
-            candidates = []
-            for part in srcset.split(","):
-                part = part.strip()
-                m = re.match(r"(\S+)\s+(\d+)w", part)
-                if m:
-                    candidates.append((int(m.group(2)), m.group(1)))
-            if candidates:
-                candidates.sort(key=lambda x: x[0])
-                return absolute_url(candidates[-1][1])
-
-        src = any_img.get("src", "")
-        if src:
-            return absolute_url(src)
+    best = pick_best_image_from_tag(any_img)
+    if best:
+        return best
 
     return ""
 
@@ -107,11 +107,14 @@ def scrape_week(week: int) -> dict:
     )
     r.raise_for_status()
 
+    # Force correct decoding so curly quotes / dashes survive
     r.encoding = "utf-8"
+
     soup = BeautifulSoup(r.text, "html.parser")
 
-    # ---- SCRAPE PARTS ----
+    # Small heading is typically p.title-number
     small_heading_el = soup.select_one("p.title-number")
+    # Big heading is typically the first h1
     big_heading_el = soup.select_one("h1")
 
     small_heading = get_text_or_empty(small_heading_el)
@@ -119,21 +122,6 @@ def scrape_week(week: int) -> dict:
 
     image_url = pick_first_image(soup)
 
-    # ---- FALLBACK IMAGE (only if pick_first_image returned nothing) ----
-    if not image_url:
-        img = soup.find("img", srcset=True)
-        if img and img.get("srcset"):
-            candidates = []
-            for part in img["srcset"].split(","):
-                part = part.strip()
-                m = re.match(r"(\S+)\s+(\d+)w", part)
-                if m:
-                    candidates.append((int(m.group(2)), m.group(1)))
-            if candidates:
-                candidates.sort()
-                image_url = absolute_url(candidates[-1][1])
-
-    # ---- RETURN DATA (single, final return) ----
     return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "week_number": week,
@@ -154,15 +142,12 @@ def main():
         print(f"ERROR scraping week {week}: {e}", file=sys.stderr)
         raise
 
-    # Ensure output dir exists
-    import os
-
     os.makedirs(os.path.dirname(OUT_JSON), exist_ok=True)
 
     with open(OUT_JSON, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
-    print(f"Wrote {OUT_JSON} for week {week}: {payload['big_heading']}")
+    print(f"Wrote {OUT_JSON} for week {week}: {payload.get('big_heading','')}")
 
 
 if __name__ == "__main__":
