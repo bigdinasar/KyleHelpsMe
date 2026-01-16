@@ -346,6 +346,72 @@
       color: var(--muted);
       line-height: 1.4;
     }
+    /* Come Follow Me widget */
+.cfm-card{
+  margin-top: 22px;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.cfm-head{
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 16px 10px;
+}
+
+.cfm-title{
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.cfm-sub{
+  margin: 0 0 6px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b45309; /* warm accent similar to the site’s small heading */
+}
+
+.cfm-big{
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--brand);
+  line-height: 1.2;
+}
+
+.cfm-link{
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--brand);
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.cfm-link:hover{ text-decoration: underline; }
+
+.cfm-imageWrap{
+  display: block;
+  padding: 0 16px 16px;
+}
+
+#cfmImg{
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #e5e7eb;
+  display: block;
+}
+
+@media (min-width: 640px){
+  #cfmImg{ height: 300px; }
+}
   </style>
 </head>
 
@@ -452,6 +518,31 @@
   <div id="map" aria-label="Map"></div>
 </div>
       </section>
+<!-- THIS WEEK'S COME FOLLOW ME STUDY -->
+<section class="cfm-card" aria-label="This week's Come Follow Me study">
+  <div class="cfm-head">
+    <div>
+      <h2 class="cfm-title">This Week’s Come Follow Me Study</h2>
+      <p class="cfm-sub" id="cfmSmallHeading"></p>
+      <p class="cfm-big" id="cfmBigHeading"></p>
+    </div>
+
+    <a class="cfm-link" id="cfmOpenLink" href="#" target="_blank" rel="noopener">
+      View full lesson →
+    </a>
+  </div>
+
+  <a
+    class="cfm-imageWrap"
+    id="cfmImageLink"
+    href="#"
+    target="_blank"
+    rel="noopener"
+    aria-label="Open lesson page"
+  >
+    <img id="cfmImg" alt="Come Follow Me image" loading="lazy" />
+  </a>
+</section>
 
       <!-- UPCOMING EVENTS WIDGET -->
       <div class="events-wrap" aria-label="Upcoming events">
@@ -720,6 +811,41 @@ fetch(WARD_BOUNDARY_GEOJSON_URL)
     // Prevent menu clicks from closing immediately
     $("shareMenu").addEventListener("click", (e) => e.stopPropagation());
     $("moreMenu").addEventListener("click", (e) => e.stopPropagation());
+    // ----------------------------
+// Come Follow Me widget (loads local JSON produced by GitHub Action)
+// ----------------------------
+async function loadComeFollowMeWidget() {
+  const jsonUrl = "./data/come_follow_me_this_week.json";
+
+  try {
+    const res = await fetch(jsonUrl, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Failed to load ${jsonUrl} (${res.status})`);
+    const data = await res.json();
+
+    const small = document.getElementById("cfmSmallHeading");
+    const big = document.getElementById("cfmBigHeading");
+    const img = document.getElementById("cfmImg");
+    const open = document.getElementById("cfmOpenLink");
+    const imgLink = document.getElementById("cfmImageLink");
+
+    if (small) small.textContent = data.small_heading || "";
+    if (big) big.textContent = data.big_heading || "";
+    if (img) {
+      img.src = data.image_url || "";
+      img.alt = (data.big_heading ? `Come Follow Me: ${data.big_heading}` : "Come Follow Me image");
+    }
+
+    const lessonUrl = data.source_url || "#";
+    if (open) open.href = lessonUrl;
+    if (imgLink) imgLink.href = lessonUrl;
+  } catch (err) {
+    console.error(err);
+    const big = document.getElementById("cfmBigHeading");
+    if (big) big.textContent = "Unable to load this week’s lesson right now.";
+  }
+}
+
+loadComeFollowMeWidget();
   </script>
 </body>
 </html>
