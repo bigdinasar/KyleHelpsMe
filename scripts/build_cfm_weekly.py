@@ -29,42 +29,70 @@ def absolute_url(u: str) -> str:
 def pick_first_image(soup: BeautifulSoup) -> str:
     """
     Prefer the header hero image first (img#img1).
-    If not found, fall back to the first figure image, then any img.
+    Use the LARGEST srcset candidate if available (best quality).
+    If not found, fall back to first figure image, then any img.
     """
 
-    # 1) The one you want (hero/header image)
-    img = soup.select_one("img#img1[src]")
-    if img and img.get("src"):
-        return absolute_url(img["src"])
+    img = soup.select_one("img#img1")
+    if img:
+        # Prefer largest srcset candidate (best quality)
+        srcset = img.get("srcset", "")
+        if srcset:
+            candidates = []
+            for part in srcset.split(","):
+                part = part.strip()
+                m = re.match(r"(\S+)\s+(\d+)w", part)
+                if m:
+                    candidates.append((int(m.group(2)), m.group(1)))
+            if candidates:
+                candidates.sort(key=lambda x: x[0])
+                return absolute_url(candidates[-1][1])
 
-    # If it only has srcset, pick the largest srcset candidate
-    img = soup.select_one("img#img1[srcset]")
-    if img and img.get("srcset"):
-        candidates = []
-        for part in img["srcset"].split(","):
-            part = part.strip()
-            m = re.match(r"(\S+)\s+(\d+)w", part)
-            if m:
-                candidates.append((int(m.group(2)), m.group(1)))
-        if candidates:
-            candidates.sort()
-            return absolute_url(candidates[-1][1])
+        # Fallback to src if no srcset
+        src = img.get("src", "")
+        if src:
+            return absolute_url(src)
 
-    # 2) Fallback: first <figure> image (often figure1_img1)
-    fig_img = soup.select_one("figure img[src]")
-    if fig_img and fig_img.get("src"):
-        return absolute_url(fig_img["src"])
+    # 2) Fallback: first <figure> image
+    fig_img = soup.select_one("figure img")
+    if fig_img:
+        # same idea: prefer srcset if present
+        srcset = fig_img.get("srcset", "")
+        if srcset:
+            candidates = []
+            for part in srcset.split(","):
+                part = part.strip()
+                m = re.match(r"(\S+)\s+(\d+)w", part)
+                if m:
+                    candidates.append((int(m.group(2)), m.group(1)))
+            if candidates:
+                candidates.sort(key=lambda x: x[0])
+                return absolute_url(candidates[-1][1])
 
-    # 3) Fallback: any img with src
-    any_img = soup.find("img", src=True)
-    if any_img and any_img.get("src"):
-        return absolute_url(any_img["src"])
+        src = fig_img.get("src", "")
+        if src:
+            return absolute_url(src)
+
+    # 3) Fallback: any img
+    any_img = soup.find("img")
+    if any_img:
+        srcset = any_img.get("srcset", "")
+        if srcset:
+            candidates = []
+            for part in srcset.split(","):
+                part = part.strip()
+                m = re.match(r"(\S+)\s+(\d+)w", part)
+                if m:
+                    candidates.append((int(m.group(2)), m.group(1)))
+            if candidates:
+                candidates.sort(key=lambda x: x[0])
+                return absolute_url(candidates[-1][1])
+
+        src = any_img.get("src", "")
+        if src:
+            return absolute_url(src)
 
     return ""
-
-
-def get_text_or_empty(el) -> str:
-    return el.get_text(" ", strip=True) if el else ""
 
 
 def scrape_week(week: int) -> dict:
@@ -79,7 +107,12 @@ def scrape_week(week: int) -> dict:
     )
     r.raise_for_status()
 
-    soup = BeautifulSoup(r.text, "html.parser")
+    # Force correct decoding
+    r.encoding = "utf-8"
+    html = r.text
+
+    soup = BeautifulSoup(html, "html.parser")
+    # ... continue scraping ...
 
     # Small red heading: seen as <p class="title-number" id="title_number1">...</p>
     small_heading = soup.select_one("p.title-number") or soup.select_one("#title_number1")
