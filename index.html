@@ -615,22 +615,22 @@ fetch(WARD_BOUNDARY_GEOJSON_URL)
   })
   .then((geojson) => {
     const boundaryLayer = L.geoJSON(geojson, {
-      interactive: false, // <-- makes it NOT selectable/clickable
+      interactive: false,
       style: () => ({
-  color: "#157493",   // boundary outline color
-  weight: 3,
-  opacity: 0.95,
-  fill: false         // <-- THIS removes the interior fill
-})
-
+        color: "#157493",
+        weight: 3,
+        opacity: 0.95,
+        fill: false
+      })
     }).addTo(map);
 
-    // Optional: zoom the map to show the whole boundary nicely
-    // map.fitBounds(boundaryLayer.getBounds(), { padding: [18, 18] });
+    // Center/zoom the map to the ward boundary by default
+    map.fitBounds(boundaryLayer.getBounds(), { padding: [20, 20] });
   })
   .catch((err) => console.error(err));
-const marker = L.marker([CONFIG.lat, CONFIG.lng]).addTo(map);
-marker.bindPopup(`
+
+    const marker = L.marker([CONFIG.lat, CONFIG.lng]).addTo(map);
+    marker.bindPopup(`
   <strong>${CONFIG.unitName}</strong><br>
   ${CONFIG.address.line1}<br>
   ${CONFIG.address.city}, ${CONFIG.address.state} ${CONFIG.address.zip}<br><br>
