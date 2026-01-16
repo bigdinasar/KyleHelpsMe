@@ -107,26 +107,22 @@ def scrape_week(week: int) -> dict:
     )
     r.raise_for_status()
 
-    # Force correct decoding
     r.encoding = "utf-8"
-    html = r.text
+    soup = BeautifulSoup(r.text, "html.parser")
 
-    soup = BeautifulSoup(html, "html.parser")
-    # ... continue scraping ...
+    # ---- SCRAPE PARTS ----
+    small_heading_el = soup.select_one("p.title-number")
+    big_heading_el = soup.select_one("h1")
 
-    # Small red heading: seen as <p class="title-number" id="title_number1">...</p>
-    small_heading = soup.select_one("p.title-number") or soup.select_one("#title_number1")
-
-    # Big heading: <h1 id="title1">...</h1> (or first h1)
-    big_heading = soup.select_one("h1#title1") or soup.find("h1")
+    small_heading = get_text_or_empty(small_heading_el)
+    big_heading = get_text_or_empty(big_heading_el)
 
     image_url = pick_first_image(soup)
 
-    # If the image is present but lazy-loaded via srcset only, try to grab a decent srcset candidate
+    # ---- FALLBACK IMAGE (only if pick_first_image returned nothing) ----
     if not image_url:
         img = soup.find("img", srcset=True)
         if img and img.get("srcset"):
-            # pick the largest width in srcset
             candidates = []
             for part in img["srcset"].split(","):
                 part = part.strip()
@@ -137,16 +133,15 @@ def scrape_week(week: int) -> dict:
                 candidates.sort()
                 image_url = absolute_url(candidates[-1][1])
 
-    data = {
+    # ---- RETURN DATA (single, final return) ----
+    return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "week_number": week,
         "source_url": url,
         "image_url": image_url,
-        "small_heading": get_text_or_empty(small_heading),
-        "big_heading": get_text_or_empty(big_heading),
+        "small_heading": small_heading,
+        "big_heading": big_heading,
     }
-
-    return data
 
 
 def main():
