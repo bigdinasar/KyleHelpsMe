@@ -649,7 +649,7 @@
       // Turn the normal embed URL into an Agenda-style embed with minimal chrome.
       // We keep the same src + ctz query params and add agenda/minimal flags.
       const u = new URL(fullEmbedUrl);
-      u.searchParams.set("mode", "AGENDA");
+      u.searchParams.set("mode", "WEEK");
       u.searchParams.set("showTitle", "0");
       u.searchParams.set("showNav", "0");
       u.searchParams.set("showDate", "0");
