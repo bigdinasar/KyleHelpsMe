@@ -644,7 +644,7 @@
     function buildWeekEmbedFromFullEmbed(fullEmbedUrl){
       // Force WEEK view with minimal chrome.
       const u = new URL(fullEmbedUrl);
-      u.searchParams.set("mode", "WEEK");
+      u.searchParams.set("mode", "AGENDA");
       u.searchParams.set("showTitle", "0");
       u.searchParams.set("showNav", "0");
       u.searchParams.set("showDate", "0");
